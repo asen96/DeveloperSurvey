@@ -6,4 +6,4 @@ StackOverflow is a popular forum for software developers, students, and anyone w
 
 Data from 2017 to 2021 has been used in this project.
 
-![](https://github.com/asen96/DeveloperSurvey/blob/main/visualizations/salary_by_education.png)
+![](./visualizations/salary_by_education.png)
