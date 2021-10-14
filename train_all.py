@@ -50,3 +50,5 @@ def main():
     
     results.to_csv('../data/results.csv')
     
+if __name__ == 'main':
+    main()

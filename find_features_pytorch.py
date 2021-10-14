@@ -115,5 +115,5 @@ def main():
     features = best_features(data_path)
     make_csv(features)
 
-if __name__==main:
+if __name__== 'main':
     main()
