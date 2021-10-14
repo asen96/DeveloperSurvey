@@ -1,52 +1,66 @@
 import pandas as pd
 import numpy as np
-import csv
 import math
-import re
-from tqdm import tqdm
 import os
 
-# Function that takes an exclusive column (one where the respondent can only select one answer, eg. country, employment status)
-# and explodes it into one hot encoded columns, for each possible response. The salary column (ConvertedComp) is appended to 
-# make learning easier while training later.
-def exc_col(column:str) -> (pd.DataFrame):
+df = pd.read_csv('../data/survey_results_public.csv', index_col='Respondent')
+
+# Divide columns into three categories, ones which may contain multiple responses in one entry (eg. programming languages used), 
+# one for numeric responses (eg. age, salary), and one for exclusive responses (eg. country)
+multiple = ['EduOther','DevType','LastInt','JobFactors','WorkChallenge','LanguageWorkedWith','LanguageDesireNextYear',
+           'DatabaseWorkedWith','DatabaseDesireNextYear','PlatformWorkedWith','PlatformDesireNextYear',
+           'WebFrameWorkedWith','WebFrameDesireNextYear','MiscTechWorkedWith','MiscTechDesireNextYear',
+           'DevEnviron','Containers','SOVisitTo','SONewContent','Gender','Sexuality','Ethnicity']
+
+numeric = ['YearsCode','Age1stCode','YearsCodePro','CompTotal','ConvertedComp','WorkWeekHrs','CodeRevHrs','Age']
+
+exclusive = [x for x in df.columns if ((x not in numeric) and (x not in multiple))]
+
+# Function to take exclusive columns and explode them into one-hot-encoded columns, for each response;
+# the column for annual salary is also appended to make learning individual features easier
+def exc_col(column:str):
     
     df_expanded = (pd.get_dummies(df[column])).join(df['ConvertedComp'])
     return df_expanded
 
-# For columns which allow multiple responses (eg. programming languages used), each response is split with the ';' delimiter, 
-# and for each unique response, a one hot encoded column is created.
-def mul_col(column:str) -> (pd.DataFrame):
+# For multiple-response columns, each entry is taken and split by the delimiter ';', and then exploded into one-hot-encoded
+# columns; annual salary column is also appended
+def mul_col(column:str):
     
     entry = dict()
     df_expanded = pd.DataFrame()
-    for i in range(1,len(df)+1):
+    for i in list(df.index):
         
         entry = dict()
-        if type(df[column][i]) == float and math.isnan(df[column][i]):
-            # Column for NA response
+        if type(df.loc[i,column]) == float and math.isnan(df.loc[i,column]):
             entry[column+'_na'] = np.int64(1)
             df_expanded = df_expanded.append(entry, ignore_index=True).fillna(0)
             continue
         
-        for x in (df[column][i]).split(';'):
+        for x in (df.loc[i,column]).split(';'):
             entry[x] = np.int64(1)
         
         df_expanded = df_expanded.append(entry, ignore_index=True).fillna(0)
+    
+    df_expanded = df_expanded.set_index(df.index)
+    df_expanded['ConvertedComp'] = df['ConvertedComp']
         
-    return df_expanded.join(df['ConvertedComp']).set_index(df.index)
+    return df_expanded
 
-# For columns with numerical responses, a data frame is returned with the responses and the salary column.
-def num_col(column:str) -> (pd.DataFrame):
+# Numerical columns are maintained as is, but for each individual feature, the annual salary column is appended and saved in a separate csv file
+def num_col(column:str):
     
     for i in range(1,len(df)):
         e = df.loc[i,column]
     
     return df[[column,'ConvertedComp']].astype(np.float64)
 
-# Outliers are removed. An outlier is defined as a response which lies beyound the 3*sigma interval of the mean. This is 
-# especially useful for numerical columns. A reject list is created which contains the indices of the responses that should be removed.
+# Function to remove outliers, especially important for numerical columns
+# Outliers are defined as values which lie beyond the 3*sigma interval of the mean
+# Also rows in which there is no salary data
+# The function returns a list of indices which must be discounted while training the NN
 def remove_outliers(column:str, reject:list) -> (list):
+    
     
     mean = df.loc[:,column].mean()
     std_3 = 3 * df.loc[:,column].std()
@@ -73,65 +87,53 @@ def remove_outliers(column:str, reject:list) -> (list):
         
     return reject
 
-df = pd.read_csv('../data/survey_results_public.csv', index_col='Respondent')
+def main():
 
-# Divide columns into multiple, numeric or exclusive
-multiple = ['EduOther','DevType','LastInt','JobFactors','WorkChallenge','LanguageWorkedWith','LanguageDesireNextYear',
-           'DatabaseWorkedWith','DatabaseDesireNextYear','PlatformWorkedWith','PlatformDesireNextYear',
-           'WebFrameWorkedWith','WebFrameDesireNextYear','MiscTechWorkedWith','MiscTechDesireNextYear',
-           'DevEnviron','Containers','SOVisitTo','SONewContent','Gender','Sexuality','Ethnicity']
-
-numeric = ['YearsCode','Age1stCode','YearsCodePro','CompTotal','ConvertedComp','WorkWeekHrs','CodeRevHrs','Age']
-
-exclusive = [x for x in df.columns if ((x not in numeric) and (x not in multiple))]
-
-for column in exclusive:
+    for column in exclusive:
+        name = 'df_' + column
+        path = '../data/columns/exclusive/' + column + '.csv'
+        locals()[name] = exc_col(column)
+        locals()[name].to_csv(path)
     
-    name = 'df_' + column
-    path = '../data/columns/exclusive/' + column + '.csv'
-    locals()[name] = exc_col(column)
-    locals()[name].to_csv(path)
 
-for column in multiple:
-    
-    name = 'df_' + column
-    path = '../data/columns/multiple/' + column + '.csv'
-    locals()[name] = mul_col(column)
-    locals()[name].to_csv(path)
+    for column in multiple:
+        name = 'df_' + column
+        path = '../data/columns/multiple/' + column + '.csv'
+        locals()[name] = mul_col(column)
+        locals()[name].to_csv(path)
 
-# Replace some string responses to numerics, to make preprocessing easier
-df[['YearsCode','Age1stCode','YearsCodePro']] = df[['YearsCode','Age1stCode','YearsCodePro']].replace(['Less than 1 year','Younger than 5 years',
+    df[['YearsCode','Age1stCode','YearsCodePro']] = df[['YearsCode','Age1stCode','YearsCodePro']].replace(['Less than 1 year','Younger than 5 years',
                                                        'More than 50 years','Older than 85'],
                                                       ['0.5','2.5','56','86']).astype(np.float64)
 
-for column in numeric:
-    
-    if column != 'ConvertedComp' and column != 'CompTotal':
-        name = 'df_' + column
-        path = '../data/columns/numeric/' + column + '.csv'
-        if column == 'ConvertedComp' or column == 'CompTotal':
+    for column in numeric:
+        if column != 'ConvertedComp' and column != 'CompTotal':
+            name = 'df_' + column
+            path = '../data/columns/numeric/' + column + '.csv'
+            locals()[name] = num_col(column)
+            locals()[name].to_csv(path)
+
+    reject = []
+    for column in numeric:
+        reject = remove_outliers(column, reject)
+        reject.sort()
+
+    # Save files after removing rejected rows
+    path = '../data/columns'
+    for folder in os.listdir(path):
+        if folder == '.DS_Store':
             continue
-        locals()[name] = num_col(column)
-        locals()[name].to_csv(path)
-
-# Get indices to reject
-reject = []
-for column in numeric:
-    
-    reject = remove_outliers(column, reject)
-    reject.sort()
-
-# Remove rows which were flagged by reject
-path = '../data/columns'
-for folder in os.listdir(path):
-    fold_path = path + '/' + folder
-    try:
+        fold_path = path + '/' + folder
         for file in os.listdir(fold_path):
-            if file.endswith('.csv'):
+            if file.endswith('.csv') and file != 'ConvertedComp.csv':
+                print(file)
                 file_path = fold_path + '/' + file
                 df_temp = pd.read_csv(file_path, index_col='Respondent')
-                df_temp = df_temp.drop(index=reject)
-                df_temp.to_csv(file_path)     
-    except:
-        continue
+                try:
+                    df_temp = df_temp.drop(index=reject)
+                    df_temp.to_csv(file_path)
+                except:
+                    continue
 
+if __name__== main:
+    main()
