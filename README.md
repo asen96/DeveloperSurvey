@@ -46,7 +46,7 @@ Preprocessing the data involved the following main steps:
 
 ### Training (train.py)
 
-The neural network is inintialized in PyTorch, with one hidden layer neuron and one output, corresponding to the salary. Before the data is fed to the neural network, the columns are scaled by dividing the entries by the maximum entry in each column, defined as the mean + 3\* sigma. The training data is converted into a torch DataLoader and fed into the forward network, the loss is calculated as the mean squared error, and the weights are adjusted using the backpropagation algorithm. The standard Adam optimizer is used.
+The neural network is inintialized in PyTorch, with one hidden layer neuron and one output, corresponding to the salary (an equivalent model is described in keras_model.py). Before the data is fed to the neural network, the columns are scaled by dividing the entries by the maximum entry in each column, defined as the mean + 3\* sigma. The training data is converted into a torch DataLoader and fed into the forward network, the loss is calculated as the mean squared error, and the weights are adjusted using the backpropagation algorithm. The standard Adam optimizer is used.
 
 ### Finding the best features (find_features.py)
 
